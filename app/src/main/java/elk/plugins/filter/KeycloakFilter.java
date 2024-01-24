@@ -97,9 +97,9 @@ public class KeycloakFilter implements Filter {
                 String httpHeader = (String)f;
                 JSONObject jsonHeader = new JSONObject(httpHeader);
 
-                if (!jsonHeader.isNull("x-token-auth"))
+                if (jsonHeader.has("x_token_auth"))
                 {
-                    String tokenToVerify = jsonHeader.getString("x-token-auth");
+                    String tokenToVerify = jsonHeader.getString("x_token_auth");
 
                     try{
                         KeycloakDeployment depl = KeycloakDeploymentBuilder.build(config);
@@ -116,13 +116,19 @@ public class KeycloakFilter implements Filter {
                         e.setField("auth_error", ex.getMessage());
                         e.setField("authorized", false);
                     }
+                    catch (Exception ex)
+                    {
+                        e.setField("auth_error", ex.getMessage());
+                        e.setField("authorized", false);
+                    }
                 }
                 else
                 {
+                    e.setField("auth_error", "can't find auth token");
                     e.setField("authorized", false);
                 }
 
-                e.remove(sourceField);
+                //e.remove(sourceField);
 
                 matchListener.filterMatched(e);
             }
