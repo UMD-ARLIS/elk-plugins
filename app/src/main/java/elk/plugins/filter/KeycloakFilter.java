@@ -8,77 +8,48 @@ import co.elastic.logstash.api.FilterMatchListener;
 import co.elastic.logstash.api.LogstashPlugin;
 import co.elastic.logstash.api.PluginConfigSpec;
 
-import org.json.JSONObject;
 import org.keycloak.adapters.KeycloakDeployment;
 import org.keycloak.adapters.KeycloakDeploymentBuilder;
 import org.keycloak.adapters.rotation.AdapterTokenVerifier;
-import org.keycloak.common.VerificationException;
+//import org.keycloak.common.VerificationException;
 import org.keycloak.representations.adapters.config.AdapterConfig;
 
 /*
-import org.keycloak.OAuth2Constants;
-import org.keycloak.admin.client.Keycloak;
-import org.keycloak.admin.client.KeycloakBuilder;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
+import io.jsonwebtoken.Jwts;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.http.HttpResponse.BodyHandlers;
 import java.security.KeyFactory;
+import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.Base64;
 */
+
 import java.util.*;
+import org.json.JSONObject;
 
 // class name must match plugin name
 @LogstashPlugin(name = "keycloak_filter")
 public class KeycloakFilter implements Filter {
     public static final PluginConfigSpec<String> SOURCE_CONFIG = PluginConfigSpec.stringSetting("source", "authorization");
-    public static final PluginConfigSpec<String> SERVER_CONFIG = PluginConfigSpec.stringSetting("server", null, false, true);
-    public static final PluginConfigSpec<String> REALM_CONFIG = PluginConfigSpec.stringSetting("realm", null, false, true);
-    public static final PluginConfigSpec<String> RESOURCE_CONFIG = PluginConfigSpec.stringSetting("resource", null, false, true);
+    public static final PluginConfigSpec<String> SERVER_CONFIG = PluginConfigSpec.stringSetting("server", null, false, false);
+    public static final PluginConfigSpec<String> REALM_CONFIG = PluginConfigSpec.stringSetting("realm", null, false, false);
+    public static final PluginConfigSpec<String> RESOURCE_CONFIG = PluginConfigSpec.stringSetting("resource", null, false, false);
 
     private String id;
     private String sourceField;
-    private String realm;
-    private String server;
-    private String resource;
-    //private static String keycloakPublicKey;
-
-    //private Keycloak keyCloak;
+    private KeycloakDeployment deployment;
 
     public KeycloakFilter(String id, Configuration config, Context context) {
         // constructors should validate configuration options
         this.id = id;
-        this.realm = config.get(REALM_CONFIG);
-        this.server = config.get(SERVER_CONFIG);
-        this.resource = config.get(RESOURCE_CONFIG);
         this.sourceField = config.get(SOURCE_CONFIG);
 
-        /*
-        HttpClient httpClient = HttpClient.newHttpClient();
+        AdapterConfig adapterConfig = new AdapterConfig();
+        adapterConfig.setRealm(config.get(REALM_CONFIG));
+        adapterConfig.setResource(config.get(RESOURCE_CONFIG));
+        adapterConfig.setAuthServerUrl(config.get(SERVER_CONFIG));
 
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create("http://localhost:8080/realms/userale-keycloak-demo/protocol/openid-connect/certs"))
-            .build();
-
-        String token = "ghfghfdhdhdfhdfghdhdfhdfhdfhhdf";
-        keycloakPublicKey = "awdasdsadaefafafaef5df65d4f";
-        X509EncodedKeySpec keySpec = new X509EncodedKeySpec(Base64.getDecoder().decode(keycloakPublicKey));
-        KeyFactory kf = KeyFactory.getInstance("RSA");
-        PublicKey = kf.generatePublic(keySpec);
-        */
-        
-        /*
-        this.keyCloak = KeycloakBuilder.builder()
-            .serverUrl("https://sso.example.com/auth")
-            .realm("example")
-            .grantType(OAuth2Constants.CLIENT_CREDENTIALS)
-            .clientId("client")
-            .clientSecret("secret")
-            .build();
-        */
+        this.deployment = KeycloakDeploymentBuilder.build(adapterConfig);
     }
 
     @Override
@@ -87,34 +58,31 @@ public class KeycloakFilter implements Filter {
             Object f = e.getField(sourceField);
 
             if (f instanceof String) {
-                //e.setField(sourceField, StringUtils.reverse((String)f));
-
-                AdapterConfig config = new AdapterConfig();
-                config.setRealm(this.realm);
-                config.setResource(this.resource);
-                config.setAuthServerUrl(this.server);
-
                 String httpHeader = (String)f;
                 JSONObject jsonHeader = new JSONObject(httpHeader);
 
                 if (jsonHeader.has("x_token_auth"))
                 {
-                    String tokenToVerify = jsonHeader.getString("x_token_auth");
+                    String token = jsonHeader.getString("x_token_auth");
 
                     try{
-                        KeycloakDeployment depl = KeycloakDeploymentBuilder.build(config);
 
-                        var tok = AdapterTokenVerifier.verifyToken(tokenToVerify, depl);
+                        var tok = AdapterTokenVerifier.verifyToken(token, this.deployment);
                         // passed
                         tok.getPreferredUsername(); // user name
                         tok.getSubject();           // keycloak user id
-    
+                        /*
+                        X509EncodedKeySpec keySpec = new X509EncodedKeySpec(Base64.getDecoder().decode(this.keycloakPublicKey));
+                        KeyFactory kf = KeyFactory.getInstance("RSA");
+                        PublicKey publicKeyObj = kf.generatePublic(keySpec);
+
+                        Jws<Claims> jwt = Jwts.parserBuilder()
+                            .setSigningKey(publicKeyObj)
+                            .build()
+                            .parseClaimsJws(token);
+                        */
+
                         e.setField("authorized", true);
-                    }
-                    catch (VerificationException ex){
-                        // failed
-                        e.setField("auth_error", ex.getMessage());
-                        e.setField("authorized", false);
                     }
                     catch (Exception ex)
                     {
@@ -128,7 +96,7 @@ public class KeycloakFilter implements Filter {
                     e.setField("authorized", false);
                 }
 
-                //e.remove(sourceField);
+                e.remove(sourceField);
 
                 matchListener.filterMatched(e);
             }
