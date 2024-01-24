@@ -8,6 +8,7 @@ import co.elastic.logstash.api.FilterMatchListener;
 import co.elastic.logstash.api.LogstashPlugin;
 import co.elastic.logstash.api.PluginConfigSpec;
 
+import org.json.JSONObject;
 import org.keycloak.adapters.KeycloakDeployment;
 import org.keycloak.adapters.KeycloakDeploymentBuilder;
 import org.keycloak.adapters.rotation.AdapterTokenVerifier;
@@ -93,25 +94,35 @@ public class KeycloakFilter implements Filter {
                 config.setResource(this.resource);
                 config.setAuthServerUrl(this.server);
 
-                KeycloakDeployment depl = KeycloakDeploymentBuilder.build(config);
-
                 String httpHeader = (String)f;
-                
+                JSONObject jsonHeader = new JSONObject(httpHeader);
 
-                String tokenToVerify = "";
+                if (!jsonHeader.isNull("x-token-auth"))
+                {
+                    String tokenToVerify = jsonHeader.getString("x-token-auth");
 
-                try{
-                    var tok = AdapterTokenVerifier.verifyToken(tokenToVerify, depl);
-                    // passed
-                    tok.getPreferredUsername(); // user name
-                    tok.getSubject();           // keycloak user id
+                    try{
+                        KeycloakDeployment depl = KeycloakDeploymentBuilder.build(config);
 
-                    e.setField("authorized", true);
+                        var tok = AdapterTokenVerifier.verifyToken(tokenToVerify, depl);
+                        // passed
+                        tok.getPreferredUsername(); // user name
+                        tok.getSubject();           // keycloak user id
+    
+                        e.setField("authorized", true);
+                    }
+                    catch (VerificationException ex){
+                        // failed
+                        e.setField("auth_error", ex.getMessage());
+                        e.setField("authorized", false);
+                    }
                 }
-                catch (VerificationException ex){
-                    // failed
+                else
+                {
                     e.setField("authorized", false);
                 }
+
+                e.remove(sourceField);
 
                 matchListener.filterMatched(e);
             }
