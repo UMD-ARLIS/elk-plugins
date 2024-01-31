@@ -11,18 +11,7 @@ import co.elastic.logstash.api.PluginConfigSpec;
 import org.keycloak.adapters.KeycloakDeployment;
 import org.keycloak.adapters.KeycloakDeploymentBuilder;
 import org.keycloak.adapters.rotation.AdapterTokenVerifier;
-//import org.keycloak.common.VerificationException;
 import org.keycloak.representations.adapters.config.AdapterConfig;
-
-/*
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jws;
-import io.jsonwebtoken.Jwts;
-
-import java.security.KeyFactory;
-import java.security.PublicKey;
-import java.security.spec.X509EncodedKeySpec;
-*/
 
 import java.util.*;
 import org.json.JSONObject;
@@ -30,19 +19,25 @@ import org.json.JSONObject;
 // class name must match plugin name
 @LogstashPlugin(name = "keycloak_filter")
 public class KeycloakFilter implements Filter {
-    public static final PluginConfigSpec<String> SOURCE_CONFIG = PluginConfigSpec.stringSetting("source", "authorization");
-    public static final PluginConfigSpec<String> SERVER_CONFIG = PluginConfigSpec.stringSetting("server", null, false, false);
-    public static final PluginConfigSpec<String> REALM_CONFIG = PluginConfigSpec.stringSetting("realm", null, false, false);
-    public static final PluginConfigSpec<String> RESOURCE_CONFIG = PluginConfigSpec.stringSetting("resource", null, false, false);
+    public static final PluginConfigSpec<String> REALM_CONFIG = PluginConfigSpec.stringSetting("realm", null, false, true);
+    public static final PluginConfigSpec<String> SOURCE_CONFIG = PluginConfigSpec.stringSetting("source", null, false, true);
+    public static final PluginConfigSpec<String> SERVER_CONFIG = PluginConfigSpec.stringSetting("server", null, false, true);
+    public static final PluginConfigSpec<String> RESOURCE_CONFIG = PluginConfigSpec.stringSetting("resource", null, false, true);
+    public static final PluginConfigSpec<Boolean> AUTO_REMOVE_CONFIG = PluginConfigSpec.booleanSetting("auto_remove", false, false, false);
+    public static final PluginConfigSpec<String> ACCESS_TOKEN_CONFIG = PluginConfigSpec.stringSetting("access_token", "x_token_auth", false, true);
 
     private String id;
     private String sourceField;
+    private boolean autoRemove;
+    private String accessTokenField;
     private KeycloakDeployment deployment;
 
     public KeycloakFilter(String id, Configuration config, Context context) {
         // constructors should validate configuration options
         this.id = id;
         this.sourceField = config.get(SOURCE_CONFIG);
+        this.autoRemove = config.get(AUTO_REMOVE_CONFIG);
+        this.accessTokenField = config.get(ACCESS_TOKEN_CONFIG);
 
         AdapterConfig adapterConfig = new AdapterConfig();
         adapterConfig.setRealm(config.get(REALM_CONFIG));
@@ -61,34 +56,32 @@ public class KeycloakFilter implements Filter {
                 String httpHeader = (String)f;
                 JSONObject jsonHeader = new JSONObject(httpHeader);
 
-                if (jsonHeader.has("x_token_auth"))
+                if (jsonHeader.has(this.accessTokenField))
                 {
-                    String token = jsonHeader.getString("x_token_auth");
+                    String token = jsonHeader.getString(this.accessTokenField);
 
-                    try{
-
+                    try {
                         var tok = AdapterTokenVerifier.verifyToken(token, this.deployment);
-                        // passed
                         tok.getPreferredUsername(); // user name
-                        tok.getSubject();           // keycloak user id
-                        /*
-                        X509EncodedKeySpec keySpec = new X509EncodedKeySpec(Base64.getDecoder().decode(this.keycloakPublicKey));
-                        KeyFactory kf = KeyFactory.getInstance("RSA");
-                        PublicKey publicKeyObj = kf.generatePublic(keySpec);
+                        tok.getSubject();          // keycloak user id
 
-                        Jws<Claims> jwt = Jwts.parserBuilder()
-                            .setSigningKey(publicKeyObj)
-                            .build()
-                            .parseClaimsJws(token);
-                        */
-
-                        e.setField("authorized", true);
+                        // passed, but only add the "authorized" field if
+                        // AUTO_REMOVE is false, otherwise remove it if it
+                        // is available
+                        if (this.autoRemove) 
+                            e.remove("authorized");
+                        else
+                            e.setField("authorized", true);
                     }
                     catch (Exception ex)
                     {
                         e.setField("auth_error", ex.getMessage());
                         e.setField("authorized", false);
                     }
+
+                    // remove the keycloak access token from the header
+                    jsonHeader.remove(this.accessTokenField);
+                    e.setField(sourceField, jsonHeader.toString());
                 }
                 else
                 {
@@ -96,11 +89,12 @@ public class KeycloakFilter implements Filter {
                     e.setField("authorized", false);
                 }
 
-                e.remove(sourceField);
-
                 matchListener.filterMatched(e);
             }
         }
+
+        // if AUTO_REMOVE is true, then automatically remove all unauthorized events
+        if (this.autoRemove) events.removeIf(e -> e.getField("authorized") != null && (boolean)e.getField("authorized") == false);
 
         return events;
     }
@@ -109,10 +103,12 @@ public class KeycloakFilter implements Filter {
     public Collection<PluginConfigSpec<?>> configSchema() {
         // should return a list of all configuration options for this plugin
         Vector<PluginConfigSpec<?>> v = new Vector<PluginConfigSpec<?>>();
+        v.add(REALM_CONFIG); 
         v.add(SOURCE_CONFIG); 
         v.add(SERVER_CONFIG); 
-        v.add(REALM_CONFIG); 
         v.add(RESOURCE_CONFIG);
+        v.add(AUTO_REMOVE_CONFIG);
+        v.add(ACCESS_TOKEN_CONFIG);
     
        return Collections.list(v.elements());
     }

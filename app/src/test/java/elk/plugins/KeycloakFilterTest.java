@@ -23,10 +23,11 @@ public class KeycloakFilterTest {
         Map<String, Object> configSettings = new HashMap<String, Object>()
         {
             {
+                put("source", "authorization");
+                put("access_token", "x_token_auth");
                 put("realm", "userale-keycloak-demo");
                 put("server", "http://localhost:8080");
                 put("resource", "userale-keycloak-demo");
-                put("source", "authorization");
             }
         };
 
