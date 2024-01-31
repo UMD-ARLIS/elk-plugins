@@ -48,3 +48,8 @@ Further instructions can be found at [How to write a Java filter plugin](https:/
 3. When executing gradlew gem be sure to include --no-daemon. This will cause the gradle daemon to terminate when complete, preventing certain files from being locked and inaccessible
 
 4. When auto_remove is set to false the Logstash the unauthorized Logstash event will not be removed from the pipeline.
+
+5. In order to retrieve the http header from Logstash's http input, make sure that you add this attribute to the http input task in Logstash.conf:
+    > add_field => { "header" => "%{[@metadata][input][http][request][headers]}" }
+
+6. Keycloak filter adds a field called "authorization" to indicate if the Logstash event was authorized (true/false).
