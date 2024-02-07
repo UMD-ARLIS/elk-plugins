@@ -23,7 +23,7 @@ public class KeycloakFilterTest {
         Map<String, Object> configSettings = new HashMap<String, Object>()
         {
             {
-                put("source", "authorization");
+                put("source", "header");
                 put("access_token", "x_token_auth");
                 put("realm", "userale-keycloak-demo");
                 put("server", "http://localhost:8080");
@@ -39,14 +39,14 @@ public class KeycloakFilterTest {
         KeycloakFilter filter = new KeycloakFilter("keycloak_filter", config, context);
 
         Event e = new org.logstash.Event();
-        e.setField("authorization", "abcdef");
+        e.setField("header", "{'x-token-auth': 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJWellzNTZaR043ekNITGN1U3BUZjhBSmFkaTA2V2U5cWJKSmF3VTFPaGVjIn0.eyJleHAiOjE3MDYwOTUyNzYsImlhdCI6MTcwNjA5NDk3NiwianRpIjoiMGUxYjZlNzgtMzI0Mi00Njg5LTk2NmEtMzc1NjdhYzNjZGVhIiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL3JlYWxtcy91c2VyYWxlLWtleWNsb2FrLWRlbW8iLCJzdWIiOiJiZGExMDYzNi1jNWQzLTQ4NTYtYWY4ZS0zZjllZTBmYzQ0NjAiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJhZG1pbi1jbGkiLCJzZXNzaW9uX3N0YXRlIjoiOTA4MGExZWMtMmE1OC00MDRmLTkxZGMtYmRkMmIzN2UzNjE4IiwiYWNyIjoiMSIsInNjb3BlIjoicHJvZmlsZSBlbWFpbCIsInNpZCI6IjkwODBhMWVjLTJhNTgtNDA0Zi05MWRjLWJkZDJiMzdlMzYxOCIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwibmFtZSI6IlJ1ZnVzIEtuaWdodCIsInByZWZlcnJlZF91c2VybmFtZSI6InJrbmlnaHQiLCJnaXZlbl9uYW1lIjoiUnVmdXMiLCJmYW1pbHlfbmFtZSI6IktuaWdodCIsImVtYWlsIjoicmtuaWdodEBhcmxpcy51bWQuZWR1In0.vsu7IqamoAjSFQovh1hYrzcEHVahHIBQgdChleZn_8cZ9gs2molDBj1w-g2xJol6G6xJRfVtZOHDr9wC4KeqcciH4eHVHnFqd5af8EPLhpSc0GLYIh2t1lo2uIOpeLiwlZG4AlrBKD9u_QWU7cs2son0xLmrrUyXKCHf_UZVaxce0c7ZUWTuVrQe3kzMMuyCGpjJGxFVMTL5mnaKbsE-HCIvJd6zZ6uzz61mL01mEUcuIJGW76D8rxCPHtt977xIT4903l6kXCLP8auVUmKbcqFCdSi-qFqMmCbOO0v7kqFnKP32xrv16lBfNaeNrMUbQaxuAw2kEZAIMdyQWnjDZA'}");
         
         TestMatchListener matchListener = new TestMatchListener();
         Collection<Event> results = filter.filter(Collections.singletonList(e), matchListener);
 
         assertEquals(1, results.size());
-        assertEquals("fedcba", e.getField("authorization"));
         assertEquals(1, matchListener.getMatchCount());
+        assertEquals(false, e.getField("authorized"));
     }
 }
 
